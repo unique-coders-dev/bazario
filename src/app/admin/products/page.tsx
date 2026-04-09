@@ -34,6 +34,8 @@ export default function ProductsPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [showModal, setShowModal] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     name: '', nameBn: '', description: '', descriptionBn: '',
     price: 0, originalPrice: 0, discount: 0, image: '', categoryId: '', isFeatured: false
@@ -64,6 +66,7 @@ export default function ProductsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setSaving(true)
     try {
       const url = editingProduct ? `/api/admin/products/${editingProduct.id}` : '/api/admin/products'
       const method = editingProduct ? 'PUT' : 'POST'
@@ -79,19 +82,34 @@ export default function ProductsPage() {
         setEditingProduct(null)
         resetForm()
         fetchProducts()
+      } else {
+        const data = await res.json()
+        alert(data.error || 'Failed to save product')
       }
     } catch (error) {
       console.error('Failed to save product:', error)
+      alert('Failed to save product')
+    } finally {
+      setSaving(false)
     }
   }
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this product?')) return
+    setDeleting(id)
     try {
-      await fetch(`/api/admin/products/${id}`, { method: 'DELETE' })
-      fetchProducts()
+      const res = await fetch(`/api/admin/products/${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        fetchProducts()
+      } else {
+        const data = await res.json()
+        alert(data.error || 'Failed to delete product')
+      }
     } catch (error) {
       console.error('Failed to delete product:', error)
+      alert('Failed to delete product')
+    } finally {
+      setDeleting(null)
     }
   }
 
@@ -198,8 +216,16 @@ export default function ProductsPage() {
                     <button onClick={() => openEditModal(product)} className="flex-1 py-2 bg-blue-100 text-blue-600 rounded-lg text-sm hover:bg-blue-200">
                       Edit
                     </button>
-                    <button onClick={() => handleDelete(product.id)} className="py-2 px-3 bg-red-100 text-red-600 rounded-lg hover:bg-red-200">
-                      <HiOutlineTrash size={18} />
+                    <button 
+                      onClick={() => handleDelete(product.id)} 
+                      disabled={deleting === product.id}
+                      className="py-2 px-3 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 disabled:opacity-50"
+                    >
+                      {deleting === product.id ? (
+                        <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <HiOutlineTrash size={18} />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -329,8 +355,15 @@ export default function ProductsPage() {
                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-3 border border-gray-200 rounded-xl hover:bg-gray-50">
                   Cancel
                 </button>
-                <button type="submit" className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium">
-                  {editingProduct ? 'Update' : 'Create'}
+                <button type="submit" disabled={saving} className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+                  {saving ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      {editingProduct ? 'Updating...' : 'Creating...'}
+                    </>
+                  ) : (
+                    editingProduct ? 'Update' : 'Create'
+                  )}
                 </button>
               </div>
             </form>

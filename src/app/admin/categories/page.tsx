@@ -22,6 +22,8 @@ export default function CategoriesPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [showModal, setShowModal] = useState(false)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState<string | null>(null)
   const [formData, setFormData] = useState({ name: '', nameBn: '', slug: '', icon: '', description: '' })
 
   useEffect(() => {
@@ -42,6 +44,7 @@ export default function CategoriesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setSaving(true)
     try {
       const url = editingCategory ? `/api/admin/categories/${editingCategory.id}` : '/api/admin/categories'
       const method = editingCategory ? 'PUT' : 'POST'
@@ -57,19 +60,34 @@ export default function CategoriesPage() {
         setEditingCategory(null)
         setFormData({ name: '', nameBn: '', slug: '', icon: '', description: '' })
         fetchCategories()
+      } else {
+        const data = await res.json()
+        alert(data.error || 'Failed to save category')
       }
     } catch (error) {
       console.error('Failed to save category:', error)
+      alert('Failed to save category')
+    } finally {
+      setSaving(false)
     }
   }
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this category?')) return
+    setDeleting(id)
     try {
-      await fetch(`/api/admin/categories/${id}`, { method: 'DELETE' })
-      fetchCategories()
+      const res = await fetch(`/api/admin/categories/${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        fetchCategories()
+      } else {
+        const data = await res.json()
+        alert(data.error || 'Failed to delete category')
+      }
     } catch (error) {
       console.error('Failed to delete category:', error)
+      alert('Failed to delete category')
+    } finally {
+      setDeleting(null)
     }
   }
 
@@ -162,8 +180,16 @@ export default function CategoriesPage() {
                           <button onClick={() => openEditModal(cat)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">
                             <HiOutlinePencil size={18} />
                           </button>
-                          <button onClick={() => handleDelete(cat.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">
-                            <HiOutlineTrash size={18} />
+                          <button 
+                            onClick={() => handleDelete(cat.id)} 
+                            disabled={deleting === cat.id}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-50"
+                          >
+                            {deleting === cat.id ? (
+                              <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <HiOutlineTrash size={18} />
+                            )}
                           </button>
                         </div>
                       </td>
@@ -236,8 +262,15 @@ export default function CategoriesPage() {
                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-3 border border-gray-200 rounded-xl hover:bg-gray-50">
                   Cancel
                 </button>
-                <button type="submit" className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium">
-                  {editingCategory ? 'Update' : 'Create'}
+                <button type="submit" disabled={saving} className="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+                  {saving ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      {editingCategory ? 'Updating...' : 'Creating...'}
+                    </>
+                  ) : (
+                    editingCategory ? 'Update' : 'Create'
+                  )}
                 </button>
               </div>
             </form>

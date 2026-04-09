@@ -1,7 +1,7 @@
 import { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
-import prisma from './prisma'
+import { supabaseAdmin } from './supabase'
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -17,9 +17,7 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
-        const admin = await prisma.admin.findUnique({
-          where: { email: credentials.email }
-        })
+        const { data: admin, error } = await supabaseAdmin!.from('admins').select('*').eq('email', credentials.email).single()
 
         if (!admin || !admin.isActive) {
           return null

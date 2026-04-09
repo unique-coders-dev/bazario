@@ -13,15 +13,6 @@ interface DashboardStats {
   totalRevenue: number
 }
 
-interface RecentOrder {
-  id: string
-  orderNumber: string
-  customerName: string
-  total: number
-  status: string
-  createdAt: string
-}
-
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats>({
     todayOrders: 0,
@@ -32,19 +23,24 @@ export default function DashboardPage() {
     totalOrders: 0,
     totalRevenue: 0
   })
-  const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([])
   const [loading, setLoading] = useState(true)
+  const [statusFilter, setStatusFilter] = useState('')
+  const [dateFilter, setDateFilter] = useState('today')
 
   useEffect(() => {
     fetchDashboardData()
-  }, [])
+  }, [statusFilter, dateFilter])
 
   const fetchDashboardData = async () => {
+    setLoading(true)
     try {
-      const res = await fetch('/api/admin/dashboard')
+      const params = new URLSearchParams()
+      if (statusFilter) params.append('status', statusFilter)
+      if (dateFilter) params.append('date', dateFilter)
+      
+      const res = await fetch(`/api/admin/dashboard?${params.toString()}`)
       const data = await res.json()
       setStats(data.stats)
-      setRecentOrders(data.recentOrders)
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error)
     } finally {
@@ -69,7 +65,43 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">Dashboard</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
+        <div className="flex flex-wrap gap-3">
+          <select
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="px-4 py-2 border border-gray-200 rounded-xl focus:border-green-500 text-sm"
+          >
+            <option value="today">Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="all">All Time</option>
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-4 py-2 border border-gray-200 rounded-xl focus:border-green-500 text-sm"
+          >
+            <option value="">All Status</option>
+            <option value="PENDING">Pending</option>
+            <option value="CONFIRMED">Confirmed</option>
+            <option value="DELIVERED">Delivered</option>
+            <option value="CANCELLED">Cancelled</option>
+          </select>
+          <button
+            onClick={fetchDashboardData}
+            disabled={loading}
+            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-xl disabled:opacity-50 flex items-center gap-2"
+          >
+            {loading ? (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : null}
+            Refresh
+          </button>
+        </div>
+      </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -125,54 +157,6 @@ export default function DashboardPage() {
               <span className="font-medium">{stats.deliveredOrders}</span>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Recent Orders */}
-      <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-        <div className="p-4 border-b">
-          <h3 className="font-semibold text-gray-800">Recent Orders</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {recentOrders.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-gray-500">No orders yet</td>
-                </tr>
-              ) : (
-                recentOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-800">{order.orderNumber}</td>
-                    <td className="px-4 py-3 text-gray-600">{order.customerName}</td>
-                    <td className="px-4 py-3 font-medium text-green-600">{order.total}tk</td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        order.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                        order.status === 'CONFIRMED' ? 'bg-blue-100 text-blue-800' :
-                        order.status === 'DELIVERED' ? 'bg-green-100 text-green-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {order.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 text-sm">
-                      {new Date(order.createdAt).toLocaleDateString('en-BD')}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
         </div>
       </div>
     </div>

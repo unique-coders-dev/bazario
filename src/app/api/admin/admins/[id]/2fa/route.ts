@@ -1,15 +1,9 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import prisma from '@/lib/prisma'
+import { supabaseAdmin } from '@/lib/supabase'
 import speakeasy from 'speakeasy'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     const { id } = await params
     const body = await request.json()
@@ -18,10 +12,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       // Generate 2FA secret
       const secret = speakeasy.generateSecret({ name: `Bazario Admin (${id})` })
       
-      await prisma.admin.update({
-        where: { id },
-        data: { twoFactorSecret: secret.base32 }
-      })
+      const { error } = await supabaseAdmin!.from('admins').update({ two_factor_secret: secret.base32 }).eq('id', id)
+      if (error) throw error
 
       return NextResponse.json({ 
         secret: secret.base32, 
@@ -29,10 +21,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       })
     } else {
       // Disable 2FA
-      await prisma.admin.update({
-        where: { id },
-        data: { twoFactorSecret: null }
-      })
+      const { error } = await supabaseAdmin!.from('admins').update({ two_factor_secret: null }).eq('id', id)
+      if (error) throw error
 
       return NextResponse.json({ success: true })
     }

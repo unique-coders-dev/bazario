@@ -26,6 +26,11 @@ interface Category {
   icon: string | null;
 }
 
+interface DeliveryTimeSlots {
+  morning: string
+  evening: string
+}
+
 interface SiteSettings {
   siteName: string;
   logo: string;
@@ -35,7 +40,12 @@ interface SiteSettings {
   heroBackgroundImage: string;
   searchPlaceholder: string;
   filterBackgroundImage: string | null;
-  deliveryFee: number;
+  minOrderAmount: number;
+  deliveryFeeUnder200: number;
+  deliveryFeeUnder500: number;
+  deliveryFeeUnder1000: number;
+  deliveryFeeAbove1000: number;
+  deliveryTimeSlots: DeliveryTimeSlots;
 }
 
 interface CartItem extends Product {
@@ -109,7 +119,7 @@ export default function Home() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [settings, setSettings] = useState<SiteSettings | null>(null);
   const [displayedCount, setDisplayedCount] = useState(12);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
@@ -122,8 +132,15 @@ export default function Home() {
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [filterLoading, setFilterLoading] = useState(false);
   const [orderHistory, setOrderHistory] = useState<OrderHistory[]>([]);
+  const [showOrderTracking, setShowOrderTracking] = useState(false);
   const [showOrderHistory, setShowOrderHistory] = useState(false);
+  const [trackingNumber, setTrackingNumber] = useState('');
+  const [searchedOrder, setSearchedOrder] = useState<OrderHistory | null>(null);
+  const [searchedOrders, setSearchedOrders] = useState<OrderHistory[]>([]);
+  const [searchingOrder, setSearchingOrder] = useState(false);
+  const [searchMode, setSearchMode] = useState<'order' | 'whatsapp'>('order');
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
+  const [showDeliveryPopup, setShowDeliveryPopup] = useState(false);
   const loaderRef = useRef<HTMLDivElement>(null);
 
   // Fetch products, categories and settings from API
@@ -133,7 +150,19 @@ export default function Home() {
         const res = await fetch('/api/public/products');
         if (res.ok) {
           const data = await res.json();
-          setAllProducts(data.products || []);
+          // Transform products to ensure categoryId is properly set
+          const transformedProducts = (data.products || []).map((p: any) => ({
+            ...p,
+            // Use category_id if available, or extract from nested categories array
+            categoryId: p.category_id || (p.categories?.[0]?.id) || p.category?.id || '',
+            // Normalize category data
+            category: p.categories?.[0]?.name ? {
+              id: p.categories[0].id,
+              name: p.categories[0].name,
+              nameBn: p.categories[0].name_bn
+            } : p.category || { id: '', name: '', nameBn: null }
+          }));
+          setAllProducts(transformedProducts);
           setCategories(data.categories || []);
           setSettings(data.settings);
         }
@@ -193,6 +222,21 @@ export default function Home() {
     localStorage.setItem('bazario-cart', JSON.stringify(cart));
   }, [cart]);
 
+  // Check if this is first visit - show delivery popup
+  useEffect(() => {
+    const hasSeenDeliveryPopup = localStorage.getItem('bazario-delivery-popup-seen');
+    if (!hasSeenDeliveryPopup && settings) {
+      // Small delay to let the page load first
+      setTimeout(() => setShowDeliveryPopup(true), 500);
+    }
+  }, [settings]);
+
+  // Close delivery popup and save to localStorage
+  const handleCloseDeliveryPopup = () => {
+    setShowDeliveryPopup(false);
+    localStorage.setItem('bazario-delivery-popup-seen', 'true');
+  };
+
   // Filter products using useMemo for performance
   const filteredProducts = useMemo(() => {
     return allProducts.filter(product => {
@@ -204,12 +248,10 @@ export default function Home() {
     });
   }, [searchQuery, activeCategory, priceRange, allProducts]);
 
-  // Show loading when filtering
+  // Reset displayed count when category changes
   useEffect(() => {
-    setFilterLoading(true);
-    const timer = setTimeout(() => setFilterLoading(false), 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery, activeCategory, priceRange]);
+    setDisplayedCount(12);
+  }, [activeCategory, searchQuery]);
 
   // Infinite scroll
   useEffect(() => {
@@ -261,14 +303,31 @@ export default function Home() {
     setCart(prev => prev.filter(item => item.id !== id));
   };
 
+  // Calculate delivery fee based on tiers
+  const calculateDeliveryFee = (subtotal: number): number => {
+    if (subtotal === 0) return 0;
+    if (subtotal < 200) return settings?.deliveryFeeUnder200 ?? 20;
+    if (subtotal < 500) return settings?.deliveryFeeUnder500 ?? 30;
+    if (subtotal < 1000) return settings?.deliveryFeeUnder1000 ?? 40;
+    return settings?.deliveryFeeAbove1000 ?? 50;
+  };
+
   // Calculate totals
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const deliveryFee = settings?.deliveryFee ? (subtotal > 0 ? settings.deliveryFee : 0) : (subtotal > 0 ? 50 : 0);
+  const deliveryFee = calculateDeliveryFee(subtotal);
   const total = subtotal + deliveryFee;
+  const minOrderAmount = settings?.minOrderAmount ?? 100;
+
+  // Check if minimum order is met
+  const canCheckout = subtotal >= minOrderAmount && customerInfo.name && customerInfo.whatsapp && customerInfo.address && transactionId;
+  const remainingForFreeDelivery = minOrderAmount - subtotal;
+
+  const [placingOrder, setPlacingOrder] = useState(false);
 
   // Handle checkout - submit order to API
   const handleCheckout = async () => {
     if (customerInfo.name && customerInfo.whatsapp && customerInfo.address && transactionId) {
+      setPlacingOrder(true);
       try {
         const items = cart.map(item => ({
           id: item.id,
@@ -316,7 +375,87 @@ export default function Home() {
       } catch (error) {
         console.error('Order error:', error);
         alert('An error occurred. Please try again.');
+      } finally {
+        setPlacingOrder(false);
       }
+    }
+  };
+
+  // Map database order to OrderHistory format
+  const mapDbOrderToHistory = (dbOrder: any): OrderHistory => ({
+    id: dbOrder.order_number,
+    items: (dbOrder.items || []).map((item: any) => ({
+      id: item.product_id,
+      name: item.product_name,
+      price: item.price,
+      quantity: item.quantity,
+      image: '',
+      categoryId: '',
+      category: { id: '', name: '', nameBn: null },
+      nameBn: null,
+      description: null,
+      descriptionBn: null,
+      originalPrice: item.price,
+      discount: 0,
+      isActive: true,
+      isFeatured: false
+    })),
+    subtotal: dbOrder.subtotal,
+    deliveryFee: dbOrder.delivery_fee,
+    total: dbOrder.total,
+    customer: {
+      name: dbOrder.customer_name,
+      whatsapp: dbOrder.whatsapp,
+      address: dbOrder.address
+    },
+    transactionId: dbOrder.transaction_id || '',
+    orderDate: dbOrder.created_at,
+    status: (dbOrder.status || 'PENDING').toLowerCase() as 'pending' | 'confirmed' | 'delivered'
+  });
+
+  // Search for order by tracking number or WhatsApp - queries database
+  const handleOrderSearch = async () => {
+    if (!trackingNumber.trim()) return;
+    setSearchingOrder(true);
+    setSearchedOrder(null);
+    setSearchedOrders([]);
+    
+    try {
+      let url = '';
+      if (searchMode === 'order') {
+        url = `/api/public/orders?orderNumber=${encodeURIComponent(trackingNumber.trim())}`;
+      } else {
+        url = `/api/public/orders?whatsapp=${encodeURIComponent(trackingNumber.trim())}`;
+      }
+      
+      const res = await fetch(url);
+      const data = await res.json();
+      
+      if (res.ok) {
+        if (searchMode === 'order' && data.order) {
+          // Single order search
+          setSearchedOrder(mapDbOrderToHistory(data.order));
+        } else if (searchMode === 'whatsapp' && data.orders) {
+          // Multiple orders for WhatsApp search
+          setSearchedOrders(data.orders.map(mapDbOrderToHistory));
+        }
+      } else {
+        setSearchedOrder(null);
+        setSearchedOrders([]);
+      }
+    } catch (error) {
+      console.error('Order search error:', error);
+      setSearchedOrder(null);
+      setSearchedOrders([]);
+    } finally {
+      setSearchingOrder(false);
+    }
+  };
+
+  // Handle Enter key in tracking input
+  const handleTrackingKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleOrderSearch();
     }
   };
 
@@ -354,21 +493,16 @@ export default function Home() {
               )}
             </button>
 
-            {/* Order History Button */}
+            {/* Order Tracking Button */}
             <button
-              onClick={() => setShowOrderHistory(true)}
+              onClick={() => setShowOrderTracking(true)}
               className="relative p-2.5 rounded-full transition-colors"
               style={{backgroundColor: 'rgba(255,255,255,0.2)'}}
-              aria-label="View order history"
+              aria-label="Track order"
             >
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
               </svg>
-              {orderHistory.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-yellow-400 text-gray-900 text-xs font-bold rounded-full flex items-center justify-center" aria-hidden="true">
-                  {orderHistory.length}
-                </span>
-              )}
             </button>
           </div>
         </div>
@@ -410,7 +544,72 @@ export default function Home() {
             </button>
           </div>
         </div>
-      </section>      {/* Filters Section */}
+      </section>
+
+
+
+      {/* Delivery Info Popup - Shows on first visit */}
+      {showDeliveryPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-label="Delivery information">
+          <div className="absolute inset-0 bg-black/50" onClick={handleCloseDeliveryPopup} />
+          <div className="relative bg-white w-full max-w-md mx-4 rounded-2xl overflow-hidden" style={{animation: 'scaleIn 0.3s ease-out'}}>
+            <div className="bg-green-700 p-4 text-white text-center">
+              <h2 className="text-xl font-bold">🚚 Delivery Information</h2>
+            </div>
+            
+            <div className="p-5 space-y-4">
+              {/* Minimum Order */}
+              <div className="bg-green-50 p-3 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">Minimum Order Amount</span>
+                  <span className="font-bold text-green-700 text-lg">{minOrderAmount}tk</span>
+                </div>
+              </div>
+
+              {/* Delivery Fee Tiers */}
+              <div className="bg-gray-50 p-3 rounded-xl">
+                <p className="font-semibold text-gray-700 mb-2 text-sm">Delivery Fee:</p>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex justify-between bg-white p-2 rounded-lg"><span className="text-gray-500">Under 200tk</span><span className="font-medium">{settings?.deliveryFeeUnder200 ?? 20}tk</span></div>
+                  <div className="flex justify-between bg-white p-2 rounded-lg"><span className="text-gray-500">Under 500tk</span><span className="font-medium">{settings?.deliveryFeeUnder500 ?? 30}tk</span></div>
+                  <div className="flex justify-between bg-white p-2 rounded-lg"><span className="text-gray-500">Under 1000tk</span><span className="font-medium">{settings?.deliveryFeeUnder1000 ?? 40}tk</span></div>
+                  <div className="flex justify-between bg-white p-2 rounded-lg"><span className="text-gray-500">1000tk+</span><span className="font-medium">{settings?.deliveryFeeAbove1000 ?? 50}tk</span></div>
+                </div>
+              </div>
+
+              {/* Delivery Time */}
+              <div className="bg-blue-50 p-3 rounded-xl">
+                <p className="font-semibold text-gray-700 mb-2 text-sm">⏰ Delivery Time:</p>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 bg-white p-2 rounded-lg">
+                    <span>🌅</span>
+                    <span className="text-gray-600">Morning:</span>
+                    <span className="font-medium">{settings?.deliveryTimeSlots?.morning || '6 AM - 12 PM'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 bg-white p-2 rounded-lg">
+                    <span>🌙</span>
+                    <span className="text-gray-600">Evening:</span>
+                    <span className="font-medium">{settings?.deliveryTimeSlots?.evening || '4 PM - 9 PM'}</span>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-500 text-center">Orders placed are delivered in the next available slot</p>
+            </div>
+
+            <div className="p-4 border-t border-gray-100">
+              <button
+                onClick={handleCloseDeliveryPopup}
+                className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl transition-colors"
+              >
+                Got It! ✓
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Filters Section */}
       <section className="max-w-6xl mx-auto px-4 py-4 bg-white mx-4 mt-4 rounded-2xl shadow-sm">
         {/* Categories - responsive grid, not scrollable */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -448,29 +647,31 @@ export default function Home() {
 
       {/* Products Grid */}
       <section className="max-w-6xl mx-auto px-4 pb-8 mt-4">
-        {/* Loading indicator for filtering */}
-        {filterLoading && (
+        {/* Loading indicator for filtering - only show when actually filtering */}
+        {filterLoading && allProducts.length > 0 && (
           <div className="flex justify-center py-4">
-            <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" aria-label="Loading products" />
+            <div className="w-6 h-6 border-3 border-green-600 border-t-transparent rounded-full animate-spin" aria-label="Loading products" />
           </div>
         )}
+        
+        {/* Products Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5" style={{gap: '16px'}} role="list" aria-label="Products list">
           {filteredProducts.slice(0, displayedCount).map(product => (
             <ProductCard key={product.id} product={product} onAddToCart={addToCart} />
           ))}
         </div>
 
-        {/* Loading Spinner */}
+        {/* Infinite scroll loader */}
         <div ref={loaderRef} className="flex justify-center py-8" aria-label="Load more products">
-          {loading && <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />}
+          {loading && <div className="w-6 h-6 border-3 border-green-600 border-t-transparent rounded-full animate-spin" />}
           {!loading && displayedCount >= allProducts.length && filteredProducts.length > 0 && (
             <p className="text-gray-400 text-sm">You've seen all products!</p>
           )}
         </div>
 
-        {filteredProducts.length === 0 && !filterLoading && (
+        {filteredProducts.length === 0 && !filterLoading && allProducts.length > 0 && (
           <div className="text-center py-12" role="status">
-            <p className="text-gray-500">No products found</p>
+            <p className="text-gray-500">No products found in this category</p>
           </div>
         )}
       </section>
@@ -507,8 +708,7 @@ export default function Home() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        </div>      )}
 
       {/* Cart Modal */}
       {showCart && (
@@ -571,6 +771,11 @@ export default function Home() {
 
             {cart.length > 0 && (
               <div className="p-4 border-t border-gray-100 bg-gray-50">
+                {subtotal < minOrderAmount && (
+                  <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-700">
+                    Minimum order amount is {minOrderAmount}tk. Add {remainingForFreeDelivery}tk more.
+                  </div>
+                )}
                 <div className="space-y-2 mb-4">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Subtotal</span>
@@ -587,9 +792,10 @@ export default function Home() {
                 </div>
                 <button
                   onClick={() => { setShowCart(false); setShowCheckout(true); }}
-                  className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl transition-colors"
+                  disabled={subtotal < minOrderAmount}
+                  className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors"
                 >
-                  Proceed to Checkout
+                  {subtotal < minOrderAmount ? `Minimum ${minOrderAmount}tk Required` : 'Proceed to Checkout'}
                 </button>
               </div>
             )}
@@ -720,10 +926,17 @@ export default function Home() {
             <div className="p-4 border-t border-gray-100 bg-gray-50">
               <button
                 onClick={handleCheckout}
-                disabled={!customerInfo.name || !customerInfo.whatsapp || !customerInfo.address || !transactionId}
-                className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors"
+                disabled={!canCheckout || placingOrder}
+                className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
               >
-                Place Order
+                {placingOrder ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  'Place Order'
+                )}
               </button>
             </div>
           </div>
@@ -748,6 +961,185 @@ export default function Home() {
             >
               Continue Shopping
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Order Tracking Modal */}
+      {showOrderTracking && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-label="Track order">
+          <div className="absolute inset-0 bg-black/50" onClick={() => { setShowOrderTracking(false); setTrackingNumber(''); setSearchedOrder(null); setSearchedOrders([]); }} />
+          <div className="relative bg-white w-full sm:max-w-lg sm:rounded-2xl max-h-[80vh] overflow-hidden" style={{animation: 'scaleIn 0.3s ease-out'}}>
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-800">Track Your Order</h2>
+              <button onClick={() => { setShowOrderTracking(false); setTrackingNumber(''); setSearchedOrder(null); setSearchedOrders([]); }} className="p-2 hover:bg-gray-100 rounded-full" aria-label="Close tracking">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto max-h-[65vh]">
+              {/* Search Mode Toggle */}
+              <div className="mb-4 flex gap-2">
+                <button
+                  onClick={() => { setSearchMode('order'); setSearchedOrder(null); setSearchedOrders([]); }}
+                  className={`flex-1 py-2 px-4 rounded-xl font-medium text-sm transition-colors ${
+                    searchMode === 'order'
+                      ? 'bg-green-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  📋 By Order Number
+                </button>
+                <button
+                  onClick={() => { setSearchMode('whatsapp'); setSearchedOrder(null); setSearchedOrders([]); }}
+                  className={`flex-1 py-2 px-4 rounded-xl font-medium text-sm transition-colors ${
+                    searchMode === 'whatsapp'
+                      ? 'bg-green-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  📱 By WhatsApp
+                </button>
+              </div>
+
+              {/* Search Form */}
+              <div className="mb-6">
+                <label htmlFor="tracking-number" className="block text-sm font-medium text-gray-600 mb-2">
+                  {searchMode === 'order' ? 'Enter your order number' : 'Enter your WhatsApp number'}
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="tracking-number"
+                    type={searchMode === 'whatsapp' ? 'tel' : 'text'}
+                    value={trackingNumber}
+                    onChange={(e) => { setTrackingNumber(e.target.value); setSearchedOrder(null); setSearchedOrders([]); }}
+                    onKeyDown={handleTrackingKeyDown}
+                    placeholder={searchMode === 'order' ? 'e.g., ORD-1234ABCD' : 'e.g., 01XXXXXXXXX'}
+                    className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:border-green-500"
+                  />
+                  <button
+                    onClick={handleOrderSearch}
+                    disabled={!trackingNumber.trim() || searchingOrder}
+                    className="px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium rounded-xl flex items-center gap-2"
+                  >
+                    {searchingOrder ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      'Search'
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Search Result */}
+              {searchingOrder ? (
+                <div className="flex justify-center py-8">
+                  <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : searchedOrder ? (
+                /* Single order result (by order number) */
+                <div className="p-4 bg-green-50 rounded-xl">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="font-bold text-gray-800 text-lg">{searchedOrder.id}</p>
+                      <p className="text-xs text-gray-500">
+                        {new Date(searchedOrder.orderDate).toLocaleDateString('en-BD', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      searchedOrder.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                      searchedOrder.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                      'bg-green-100 text-green-800'
+                    }`}>
+                      {searchedOrder.status.charAt(0).toUpperCase() + searchedOrder.status.slice(1)}
+                    </span>
+                  </div>
+                  
+                  <div className="space-y-2 mb-3 pt-3 border-t border-green-200">
+                    {searchedOrder.items.map(item => (
+                      <div key={item.id} className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">{item.name} x{item.quantity}</span>
+                        <span className="font-medium">{item.price * item.quantity}tk</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="border-t border-green-200 pt-2 mt-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Subtotal</span>
+                      <span>{searchedOrder.subtotal}tk</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Delivery</span>
+                      <span>{searchedOrder.deliveryFee}tk</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-green-700">
+                      <span>Total</span>
+                      <span>{searchedOrder.total}tk</span>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-green-200">
+                    <p className="text-xs text-gray-500">Delivery to: {searchedOrder.customer.address}</p>
+                    <p className="text-xs text-gray-500">Phone: {searchedOrder.customer.whatsapp}</p>
+                    <p className="text-xs text-gray-500">TRX: {searchedOrder.transactionId}</p>
+                  </div>
+                </div>
+              ) : searchedOrders.length > 0 ? (
+                /* Multiple orders result (by WhatsApp) */
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-600 font-medium">{searchedOrders.length} order(s) found</p>
+                  {searchedOrders.map(order => (
+                    <div key={order.id} className="p-4 bg-green-50 rounded-xl">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <p className="font-bold text-gray-800 text-lg">{order.id}</p>
+                          <p className="text-xs text-gray-500">
+                            {new Date(order.orderDate).toLocaleDateString('en-BD', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          order.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                          'bg-green-100 text-green-800'
+                        }`}>
+                          {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-2 mb-3 pt-3 border-t border-green-200">
+                        {order.items.map(item => (
+                          <div key={item.id} className="flex items-center justify-between text-sm">
+                            <span className="text-gray-600">{item.name} x{item.quantity}</span>
+                            <span className="font-medium">{item.price * item.quantity}tk</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="border-t border-green-200 pt-2 mt-2">
+                        <div className="flex justify-between font-bold text-green-700">
+                          <span>Total</span>
+                          <span>{order.total}tk</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : trackingNumber && !searchingOrder ? (
+                <div className="text-center py-8">
+                  <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </div>
+                  <p className="text-gray-600">No order found with this number</p>
+                  <p className="text-xs text-gray-400 mt-1">Please check your order number and try again</p>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>Enter your order number to track your order</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -843,6 +1235,16 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* Floating Help Button */}
+      <button
+        onClick={() => setShowDeliveryPopup(true)}
+        className="fixed bottom-6 right-6 w-14 h-14 bg-green-600 hover:bg-green-700 text-white rounded-full shadow-lg flex items-center justify-center text-2xl font-bold z-30 transition-transform hover:scale-110"
+        aria-label="Delivery information"
+        title="Delivery Info"
+      >
+        ?
+      </button>
     </main>
   );
 }

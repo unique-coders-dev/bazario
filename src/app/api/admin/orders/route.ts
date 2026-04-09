@@ -1,14 +1,8 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import prisma from '@/lib/prisma'
+import { supabaseAdmin } from '@/lib/supabase'
 
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search') || ''
@@ -26,11 +20,16 @@ export async function GET(request: Request) {
       where.status = status
     }
 
-    const orders = await prisma.order.findMany({
-      where,
-      include: { items: { include: { product: true } } },
-      orderBy: { createdAt: sort === 'asc' ? 'asc' : 'desc' }
-    })
+    let query = supabaseAdmin!.from('orders').select('*, order_items(*, products(*))')
+    
+    if (search) {
+      query = query.or(`order_number.ilike.%${search}%,customer_name.ilike.%${search}%`)
+    }
+    if (status) {
+      query = query.eq('status', status)
+    }
+    
+    const { data: orders } = await query.order('created_at', { ascending: sort === 'asc' })
 
     return NextResponse.json({ orders })
   } catch (error) {

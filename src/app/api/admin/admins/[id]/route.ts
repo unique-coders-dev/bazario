@@ -1,15 +1,9 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import prisma from '@/lib/prisma'
+import { supabaseAdmin } from '@/lib/supabase'
 import bcrypt from 'bcryptjs'
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     const { id } = await params
     const body = await request.json()
@@ -25,18 +19,14 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       updateData.password = await bcrypt.hash(body.password, 10)
     }
 
-    const admin = await prisma.admin.update({
-      where: { id },
-      data: updateData,
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isActive: true,
-        createdAt: true
-      }
-    })
+    const { data: admin, error } = await supabaseAdmin!
+      .from('admins')
+      .update(updateData)
+      .eq('id', id)
+      .select('id, email, name, role, is_active, created_at')
+      .single()
+    
+    if (error) throw error
 
     return NextResponse.json({ admin })
   } catch (error) {
@@ -47,18 +37,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Check if user is super_admin
-    if ((session.user as any).role !== 'super_admin') {
-      return NextResponse.json({ error: 'Forbidden - Super admin only' }, { status: 403 })
-    }
 
     const { id } = await params
-    await prisma.admin.delete({ where: { id } })
+    const { error } = await supabaseAdmin!.from('admins').delete().eq('id', id)
+    if (error) throw error
 
     return NextResponse.json({ success: true })
   } catch (error) {

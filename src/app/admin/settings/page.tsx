@@ -3,6 +3,11 @@
 import { useState, useEffect } from 'react'
 import { HiOutlinePhotograph, HiOutlineSave } from 'react-icons/hi'
 
+interface DeliveryTimeSlots {
+  morning: string
+  evening: string
+}
+
 interface SiteSettings {
   siteName: string
   logo: string
@@ -12,7 +17,12 @@ interface SiteSettings {
   heroBackgroundImage: string
   searchPlaceholder: string
   filterBackgroundImage: string
-  deliveryFee: number
+  minOrderAmount: number
+  deliveryFeeUnder200: number
+  deliveryFeeUnder500: number
+  deliveryFeeUnder1000: number
+  deliveryFeeAbove1000: number
+  deliveryTimeSlots: DeliveryTimeSlots
 }
 
 export default function SettingsPage() {
@@ -25,7 +35,12 @@ export default function SettingsPage() {
     heroBackgroundImage: '',
     searchPlaceholder: 'Search for vegetables, fish, rice...',
     filterBackgroundImage: '',
-    deliveryFee: 50
+    minOrderAmount: 100,
+    deliveryFeeUnder200: 20,
+    deliveryFeeUnder500: 30,
+    deliveryFeeUnder1000: 40,
+    deliveryFeeAbove1000: 50,
+    deliveryTimeSlots: { morning: '6 AM - 12 PM', evening: '4 PM - 9 PM' }
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -65,10 +80,12 @@ export default function SettingsPage() {
       if (res.ok) {
         setMessage({ type: 'success', text: 'Settings saved successfully!' })
       } else {
-        setMessage({ type: 'error', text: 'Failed to save settings' })
+        const data = await res.json()
+        setMessage({ type: 'error', text: data.error || 'Failed to save settings' })
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'An error occurred' })
+      console.error('Failed to save settings:', error)
+      setMessage({ type: 'error', text: 'An error occurred while saving settings' })
     } finally {
       setSaving(false)
     }
@@ -91,8 +108,17 @@ export default function SettingsPage() {
           disabled={saving}
           className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-xl disabled:opacity-50"
         >
-          <HiOutlineSave size={20} />
-          {saving ? 'Saving...' : 'Save Changes'}
+          {saving ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              Saving...
+            </>
+          ) : (
+            <>
+              <HiOutlineSave size={20} />
+              Save Changes
+            </>
+          )}
         </button>
       </div>
 
@@ -132,15 +158,6 @@ export default function SettingsPage() {
                   className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:border-green-500"
                 />
               </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-600 mb-1">Delivery Fee (tk)</label>
-              <input
-                type="number"
-                value={settings.deliveryFee}
-                onChange={(e) => setSettings({ ...settings, deliveryFee: parseInt(e.target.value) || 0 })}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-green-500"
-              />
             </div>
           </div>
         </div>
@@ -185,6 +202,87 @@ export default function SettingsPage() {
                 value={settings.filterBackgroundImage || ''}
                 onChange={(e) => setSettings({ ...settings, filterBackgroundImage: e.target.value })}
                 placeholder="https://example.com/filter-bg.jpg"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-green-500"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Order & Delivery Settings */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm">
+          <h2 className="font-semibold text-gray-800 mb-4">Order & Delivery Settings</h2>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Minimum Order Amount (tk)</label>
+              <input
+                type="number"
+                value={settings.minOrderAmount}
+                onChange={(e) => setSettings({ ...settings, minOrderAmount: parseInt(e.target.value) || 0 })}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-green-500"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Under 200tk (tk)</label>
+                <input
+                  type="number"
+                  value={settings.deliveryFeeUnder200}
+                  onChange={(e) => setSettings({ ...settings, deliveryFeeUnder200: parseInt(e.target.value) || 0 })}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-green-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Under 500tk (tk)</label>
+                <input
+                  type="number"
+                  value={settings.deliveryFeeUnder500}
+                  onChange={(e) => setSettings({ ...settings, deliveryFeeUnder500: parseInt(e.target.value) || 0 })}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-green-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Under 1000tk (tk)</label>
+                <input
+                  type="number"
+                  value={settings.deliveryFeeUnder1000}
+                  onChange={(e) => setSettings({ ...settings, deliveryFeeUnder1000: parseInt(e.target.value) || 0 })}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-green-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">1000tk & above (tk)</label>
+                <input
+                  type="number"
+                  value={settings.deliveryFeeAbove1000}
+                  onChange={(e) => setSettings({ ...settings, deliveryFeeAbove1000: parseInt(e.target.value) || 0 })}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-green-500"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Delivery Time Slots */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm">
+          <h2 className="font-semibold text-gray-800 mb-4">Delivery Time Slots</h2>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Morning Slot</label>
+              <input
+                type="text"
+                value={settings.deliveryTimeSlots.morning}
+                onChange={(e) => setSettings({ ...settings, deliveryTimeSlots: { ...settings.deliveryTimeSlots, morning: e.target.value } })}
+                placeholder="e.g., 6 AM - 12 PM"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-green-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">Evening Slot</label>
+              <input
+                type="text"
+                value={settings.deliveryTimeSlots.evening}
+                onChange={(e) => setSettings({ ...settings, deliveryTimeSlots: { ...settings.deliveryTimeSlots, evening: e.target.value } })}
+                placeholder="e.g., 4 PM - 9 PM"
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-green-500"
               />
             </div>

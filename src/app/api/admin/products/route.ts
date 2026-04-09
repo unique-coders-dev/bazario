@@ -1,14 +1,8 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import prisma from '@/lib/prisma'
+import { supabaseAdmin } from '@/lib/supabase'
 
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search') || ''
@@ -26,13 +20,38 @@ export async function GET(request: Request) {
       where.categoryId = category
     }
 
-    const products = await prisma.product.findMany({
-      where,
-      include: { category: true },
-      orderBy: { createdAt: sort === 'asc' ? 'asc' : 'desc' }
+    let query = supabaseAdmin!.from('products').select('*, categories(*)')
+    
+    if (search) {
+      query = query.or(`name.ilike.%${search}%,name_bn.ilike.%${search}%`)
+    }
+    if (category) {
+      query = query.eq('category_id', category)
+    }
+    
+    const { data: products } = await query.order('created_at', { ascending: sort === 'asc' })
+
+    // Map snake_case to camelCase for frontend
+    const mappedProducts = (products || []).map((prod: any) => {
+      const category = prod.categories
+      return {
+        ...prod,
+        nameBn: prod.name_bn,
+        descriptionBn: prod.description_bn,
+        originalPrice: prod.original_price,
+        categoryId: prod.category_id,
+        isActive: prod.is_active,
+        isFeatured: prod.is_featured,
+        sortOrder: prod.sort_order,
+        category: category ? {
+          id: category.id,
+          name: category.name,
+          nameBn: category.name_bn
+        } : null
+      }
     })
 
-    return NextResponse.json({ products })
+    return NextResponse.json({ products: mappedProducts })
   } catch (error) {
     console.error('Products GET error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -41,10 +60,6 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     const body = await request.json()
     
@@ -52,22 +67,40 @@ export async function POST(request: Request) {
       ? Math.round(((body.originalPrice - body.price) / body.originalPrice) * 100) 
       : 0
 
-    const product = await prisma.product.create({
-      data: {
+    const { data: product, error } = await supabaseAdmin!
+      .from('products')
+      .insert({
         name: body.name,
-        nameBn: body.nameBn || null,
+        name_bn: body.nameBn || null,
         description: body.description || null,
-        descriptionBn: body.descriptionBn || null,
+        description_bn: body.descriptionBn || null,
         price: body.price,
-        originalPrice: body.originalPrice,
+        original_price: body.originalPrice,
         discount,
         image: body.image,
-        categoryId: body.categoryId,
-        isFeatured: body.isFeatured || false
-      }
-    })
+        category_id: body.categoryId,
+        is_active: body.isActive ?? true,
+        is_featured: body.isFeatured || false,
+        sort_order: body.sortOrder ?? 0
+      })
+      .select()
+      .single()
+    
+    if (error) throw error
 
-    return NextResponse.json({ product })
+    // Map back to camelCase for response
+    const mappedProduct = {
+      ...product,
+      nameBn: product?.name_bn,
+      descriptionBn: product?.description_bn,
+      originalPrice: product?.original_price,
+      categoryId: product?.category_id,
+      isActive: product?.is_active,
+      isFeatured: product?.is_featured,
+      sortOrder: product?.sort_order
+    }
+
+    return NextResponse.json({ product: mappedProduct })
   } catch (error) {
     console.error('Products POST error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

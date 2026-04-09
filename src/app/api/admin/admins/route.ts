@@ -1,15 +1,9 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import prisma from '@/lib/prisma'
+import { supabaseAdmin } from '@/lib/supabase'
 import bcrypt from 'bcryptjs'
 
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
 
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search') || ''
@@ -27,19 +21,16 @@ export async function GET(request: Request) {
       where.role = role
     }
 
-    const admins = await prisma.admin.findMany({
-      where,
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isActive: true,
-        twoFactorSecret: true,
-        createdAt: true
-      },
-      orderBy: { createdAt: sort === 'asc' ? 'asc' : 'desc' }
-    })
+    let query = supabaseAdmin!.from('admins').select('id, email, name, role, is_active, two_factor_secret, created_at')
+    
+    if (search) {
+      query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%`)
+    }
+    if (role) {
+      query = query.eq('role', role)
+    }
+    
+    const { data: admins } = await query.order('created_at', { ascending: sort === 'asc' })
 
     return NextResponse.json({ admins })
   } catch (error) {
@@ -50,44 +41,29 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Check if user is super_admin
-    if ((session.user as any).role !== 'super_admin') {
-      return NextResponse.json({ error: 'Forbidden - Super admin only' }, { status: 403 })
-    }
 
     const body = await request.json()
     
     // Check if email already exists
-    const existing = await prisma.admin.findUnique({
-      where: { email: body.email }
-    })
+    const { data: existing } = await supabaseAdmin!.from('admins').select('id').eq('email', body.email).single()
     if (existing) {
       return NextResponse.json({ error: 'Email already exists' }, { status: 400 })
     }
 
     const hashedPassword = await bcrypt.hash(body.password, 10)
 
-    const admin = await prisma.admin.create({
-      data: {
+    const { data: admin, error } = await supabaseAdmin!
+      .from('admins')
+      .insert({
         name: body.name,
         email: body.email,
         password: hashedPassword,
         role: body.role || 'admin'
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isActive: true,
-        createdAt: true
-      }
-    })
+      })
+      .select('id, email, name, role, is_active, created_at')
+      .single()
+    
+    if (error) throw error
 
     return NextResponse.json({ admin })
   } catch (error) {

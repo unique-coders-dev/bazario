@@ -1,24 +1,8 @@
-# Bazario - Setup Guide
+-- Bazario Database Schema
+-- Run this SQL in your Supabase SQL Editor to create all required tables
 
-## Prerequisites
-- Node.js 18+
-- Supabase Account (free tier works)
-
-## Step 1: Database Setup
-
-1. Go to [Supabase](https://supabase.com) and create a new project
-2. In the Supabase dashboard, go to **Settings** > **API**
-3. Copy your:
-   - Project URL
-   - `service_role` secret (under "Project API keys" - be careful, this has full access)
-
-## Step 2: Create Database Tables
-
-Run the following SQL in the Supabase SQL Editor to create all required tables:
-
-```sql
 -- Admins table
-CREATE TABLE admins (
+CREATE TABLE IF NOT EXISTS admins (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT UNIQUE NOT NULL,
   password TEXT NOT NULL,
@@ -31,7 +15,7 @@ CREATE TABLE admins (
 );
 
 -- Site Settings table
-CREATE TABLE site_settings (
+CREATE TABLE IF NOT EXISTS site_settings (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
   site_name TEXT DEFAULT 'Bazario',
   logo TEXT DEFAULT 'https://cdn-icons-png.flaticon.com/512/10437/10437361.png',
@@ -41,13 +25,18 @@ CREATE TABLE site_settings (
   hero_background_image TEXT,
   search_placeholder TEXT DEFAULT 'Search for vegetables, fish, rice...',
   filter_background_image TEXT,
-  delivery_fee INTEGER DEFAULT 50,
+  min_order_amount INTEGER DEFAULT 100,
+  delivery_fee_under_200 INTEGER DEFAULT 20,
+  delivery_fee_under_500 INTEGER DEFAULT 30,
+  delivery_fee_under_1000 INTEGER DEFAULT 40,
+  delivery_fee_above_1000 INTEGER DEFAULT 50,
+  delivery_time_slots JSONB DEFAULT '{"morning": "6 AM - 12 PM", "evening": "4 PM - 9 PM"}',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Categories table
-CREATE TABLE categories (
+CREATE TABLE IF NOT EXISTS categories (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   name_bn TEXT,
@@ -61,7 +50,7 @@ CREATE TABLE categories (
 );
 
 -- Products table
-CREATE TABLE products (
+CREATE TABLE IF NOT EXISTS products (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   name_bn TEXT,
@@ -80,7 +69,7 @@ CREATE TABLE products (
 );
 
 -- Orders table
-CREATE TABLE orders (
+CREATE TABLE IF NOT EXISTS orders (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
   order_number TEXT UNIQUE NOT NULL,
   customer_name TEXT NOT NULL,
@@ -96,7 +85,7 @@ CREATE TABLE orders (
 );
 
 -- Order Items table
-CREATE TABLE order_items (
+CREATE TABLE IF NOT EXISTS order_items (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
   order_id TEXT REFERENCES orders(id) ON DELETE CASCADE,
   product_id TEXT REFERENCES products(id),
@@ -105,67 +94,11 @@ CREATE TABLE order_items (
   price DECIMAL(10,2) NOT NULL,
   total DECIMAL(10,2) NOT NULL
 );
-```
 
-## Step 3: Environment Variables
-
-Create a `.env.local` file in the project root:
-
-```bash
-# Copy from .env.example
-cp .env.example .env.local
-```
-
-Edit `.env.local` and replace with your values:
-- `NEXT_PUBLIC_SUPABASE_URL`: Your Supabase project URL
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Your anon key from Settings > API
-- `SUPABASE_SERVICE_ROLE_KEY`: Your service_role secret
-- `NEXTAUTH_SECRET`: Generate with: `openssl rand -base64 32`
-- `NEXTAUTH_URL`: `http://localhost:3000`
-
-## Step 4: Seed Initial Data
-
-Create the default admin account and sample products:
-```bash
-npm run db:seed
-```
-
-**Default Admin Login:**
-- Email: `admin@bazario.com`
-- Password: `admin123`
-
-## Step 5: Run the App
-
-```bash
-npm run dev
-```
-
-## Access Points
-
-- **Customer Store:** http://localhost:3000
-- **Admin Portal:** http://localhost:3000/admin/login
-
-## Deployment
-
-1. Push your code to GitHub
-2. Import project in Vercel
-3. Add environment variables in Vercel dashboard
-4. Deploy!
-
-## Features Included
-
-### Admin Portal
-- Dashboard with today's orders, revenue, pending/running orders
-- Site Settings (logo, theme, hero section, search placeholder)
-- Category Management (create/update/delete with SVG icons)
-- Product Management (add/edit/delete products)
-- Order Management (change status, view details)
-- Admin Users (create admins, manage roles)
-- 2FA Support (Google Authenticator)
-
-### Customer Store
-- Product browsing with categories
-- Search functionality
-- Shopping cart with quantity controls
-- Checkout with bKash/Nagad payment
-- Order history with collapsible details
+-- Enable Row Level Security (RLS) - optional, can be configured later
+-- ALTER TABLE admins ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE site_settings ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
