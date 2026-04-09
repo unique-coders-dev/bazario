@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Admin User Model
+model Admin {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  password      String
+  name          String
+  role          String   @default("admin") // admin, super_admin
+  twoFactorSecret String? // For Google Authenticator
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("admins")
+}
+
+// Site Settings Model
+model SiteSettings {
+  id                    String   @id @default(cuid())
+  siteName              String   @default("Bazario")
+  logo                  String?  @default("https://cdn-icons-png.flaticon.com/512/10437/10437361.png")
+  themeColor            String   @default("#1B5E20") // Green theme
+  heroTitle             String   @default("Fresh Groceries Delivered")
+  heroSubtitle          String   @default("Quality products at your doorstep")
+  heroBackgroundImage   String?  @default("https://images.unsplash.com/photo-1542838132-92c53300491e?w=1200&h=400&fit=crop")
+  searchPlaceholder     String   @default("Search for vegetables, fish, rice...")
+  filterBackgroundImage String?  
+  deliveryFee           Int      @default(50)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("site_settings")
+}
+
+// Category Model
+model Category {
+  id          String    @id @default(cuid())
+  name        String
+  nameBn      String?   // Bengali name
+  slug        String    @unique
+  icon        String?   // SVG icon as string
+  description String?   @db.Text
+  isActive    Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  products    Product[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("categories")
+}
+
+// Product Model
+model Product {
+  id            String     @id @default(cuid())
+  name          String
+  nameBn        String?    // Bengali name
+  description   String?
+  descriptionBn String?    // Bengali description like "1kg", "1pc"
+  price         Decimal    @db.Decimal(10, 2)
+  originalPrice Decimal    @db.Decimal(10, 2)
+  discount      Int        @default(0)
+  image         String
+  categoryId    String
+  category      Category   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  isActive      Boolean    @default(true)
+  isFeatured    Boolean    @default(false)
+  sortOrder     Int        @default(0)
+  orderItems    OrderItem[]
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@map("products")
+}
+
+// Order Model
+model Order {
+  id            String      @id @default(cuid())
+  orderNumber   String      @unique
+  customerName  String
+  whatsapp      String
+  address       String      @db.Text
+  subtotal      Decimal     @db.Decimal(10, 2)
+  deliveryFee   Decimal     @db.Decimal(10, 2)
+  total         Decimal     @db.Decimal(10, 2)
+  transactionId String?
+  status        OrderStatus @default(PENDING)
+  items         OrderItem[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@map("orders")
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  DELIVERED
+  CANCELLED
+}
+
+// Order Item Model
+model OrderItem {
+  id          String  @id @default(cuid())
+  orderId     String
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product @relation(fields: [productId], references: [id])
+  productName String
+  quantity    Int
+  price       Decimal @db.Decimal(10, 2)
+  total       Decimal @db.Decimal(10, 2)
+
+  @@map("order_items")
+}
