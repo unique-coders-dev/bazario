@@ -29,9 +29,7 @@ async function executeSQL(sql: string) {
   }
 }
 
-// Alternative: Use the pg library with connection string
-import pkg from 'pg'
-const { Client } = pkg
+// Note: Using Supabase client instead of pg for direct database access
 
 async function createTablesWithPg() {
   // Construct connection string from project URL
