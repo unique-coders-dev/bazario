@@ -50,7 +50,8 @@ export async function GET() {
       deliveryFeeUnder500: settings?.delivery_fee_under_500 ?? 30,
       deliveryFeeUnder1000: settings?.delivery_fee_under_1000 ?? 40,
       deliveryFeeAbove1000: settings?.delivery_fee_above_1000 ?? 50,
-      deliveryTimeSlots
+      deliveryTimeSlots,
+      merchantNumber: settings?.merchant_number || ''
     }
 
     return NextResponse.json({ products, categories, settings: mappedSettings })

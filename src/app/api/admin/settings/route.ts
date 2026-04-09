@@ -41,7 +41,8 @@ export async function GET() {
       deliveryFeeUnder500: settings?.delivery_fee_under_500 ?? 30,
       deliveryFeeUnder1000: settings?.delivery_fee_under_1000 ?? 40,
       deliveryFeeAbove1000: settings?.delivery_fee_above_1000 ?? 50,
-      deliveryTimeSlots
+      deliveryTimeSlots,
+      merchantNumber: settings?.merchant_number || ''
     }
 
     return NextResponse.json({ settings: mappedSettings })
@@ -72,6 +73,7 @@ export async function POST(request: Request) {
     if (body.deliveryFeeUnder1000 !== undefined) dbBody.delivery_fee_under_1000 = body.deliveryFeeUnder1000
     if (body.deliveryFeeAbove1000 !== undefined) dbBody.delivery_fee_above_1000 = body.deliveryFeeAbove1000
     if (body.deliveryTimeSlots !== undefined) dbBody.delivery_time_slots = JSON.stringify(body.deliveryTimeSlots)
+    if (body.merchantNumber !== undefined) dbBody.merchant_number = body.merchantNumber
     
     let { data: existingSettings } = await supabaseAdmin!.from('site_settings').select('*').limit(1).single()
     

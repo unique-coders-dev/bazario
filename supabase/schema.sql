@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS site_settings (
   delivery_fee_under_1000 INTEGER DEFAULT 40,
   delivery_fee_above_1000 INTEGER DEFAULT 50,
   delivery_time_slots JSONB DEFAULT '{"morning": "6 AM - 12 PM", "evening": "4 PM - 9 PM"}',
+  merchant_number TEXT DEFAULT ''
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

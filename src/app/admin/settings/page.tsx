@@ -23,6 +23,7 @@ interface SiteSettings {
   deliveryFeeUnder1000: number
   deliveryFeeAbove1000: number
   deliveryTimeSlots: DeliveryTimeSlots
+  merchantNumber: string
 }
 
 export default function SettingsPage() {
@@ -40,7 +41,8 @@ export default function SettingsPage() {
     deliveryFeeUnder500: 30,
     deliveryFeeUnder1000: 40,
     deliveryFeeAbove1000: 50,
-    deliveryTimeSlots: { morning: '6 AM - 12 PM', evening: '4 PM - 9 PM' }
+    deliveryTimeSlots: { morning: '6 AM - 12 PM', evening: '4 PM - 9 PM' },
+    merchantNumber: ''
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -208,9 +210,27 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* Payment Settings */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm">
+          <h2 className="font-semibold text-gray-800 mb-4">💳 Payment Settings</h2>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-600 mb-1">bKash/Nagad Merchant Number</label>
+              <input
+                type="text"
+                value={settings.merchantNumber}
+                onChange={(e) => setSettings({ ...settings, merchantNumber: e.target.value })}
+                placeholder="e.g., 01XXXXXXXXX"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-green-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">This number will be shown to customers for payment</p>
+            </div>
+          </div>
+        </div>
+
         {/* Order & Delivery Settings */}
         <div className="bg-white rounded-2xl p-6 shadow-sm">
-          <h2 className="font-semibold text-gray-800 mb-4">Order & Delivery Settings</h2>
+          <h2 className="font-semibold text-gray-800 mb-4">🚚 Order & Delivery Settings</h2>
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-600 mb-1">Minimum Order Amount (tk)</label>

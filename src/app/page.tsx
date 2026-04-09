@@ -46,6 +46,7 @@ interface SiteSettings {
   deliveryFeeUnder1000: number;
   deliveryFeeAbove1000: number;
   deliveryTimeSlots: DeliveryTimeSlots;
+  merchantNumber: string;
 }
 
 interface CartItem extends Product {
@@ -913,7 +914,20 @@ export default function Home() {
                     <ol className="text-xs text-gray-600 space-y-1 list-decimal list-inside">
                       <li>Open bKash/Nagad app</li>
                       <li>
-                        Send <span className="font-bold text-green-700 bg-green-100 px-1 rounded">{total}tk</span> to our merchant number
+                        Send <span className="font-bold text-green-700 bg-green-100 px-1 rounded">{total}tk</span> to merchant number:
+                        {settings?.merchantNumber ? (
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(settings.merchantNumber); }}
+                            className="ml-1 inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-semibold"
+                          >
+                            {settings.merchantNumber}
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                          </button>
+                        ) : (
+                          <span className="text-red-500 font-semibold ml-1">Not configured</span>
+                        )}
                       </li>
                       <li>Copy the transaction ID</li>
                       <li>Paste it in the field above</li>
