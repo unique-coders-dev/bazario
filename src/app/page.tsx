@@ -203,6 +203,26 @@ export default function Home() {
     }
   }, []);
 
+  // Load customer info from localStorage whenever checkout modal opens
+  useEffect(() => {
+    if (showCheckout) {
+      const savedCustomer = localStorage.getItem('bazario-customer');
+      if (savedCustomer) {
+        try {
+          const parsed = JSON.parse(savedCustomer);
+          // Only autofill if current state is empty
+          setCustomerInfo(prev => ({
+            name: prev.name || parsed.name || '',
+            whatsapp: prev.whatsapp || parsed.whatsapp || '',
+            address: prev.address || parsed.address || ''
+          }));
+        } catch (e) {
+          console.error('Failed to parse customer from localStorage');
+        }
+      }
+    }
+  }, [showCheckout]);
+
   // Load order history from localStorage on mount
   useEffect(() => {
     const savedOrders = localStorage.getItem('bazario-orders');
@@ -366,6 +386,15 @@ export default function Home() {
             status: 'pending',
           };
           setOrderHistory(prev => [newOrder, ...prev]);
+          // Always save/update customer info to localStorage for next time
+          const customerData = {
+            name: customerInfo.name,
+            whatsapp: customerInfo.whatsapp,
+            address: customerInfo.address
+          };
+          localStorage.setItem('bazario-customer', JSON.stringify(customerData));
+          // Update state with the saved data immediately
+          setCustomerInfo(customerData);
           setOrderPlaced(true);
           setCart([]);
           setShowCheckout(false);
