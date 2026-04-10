@@ -48,30 +48,37 @@ export default function OrdersPage() {
     try {
       const res = await fetch(`/api/admin/orders?search=${searchQuery}&status=${statusFilter}&sort=${sortOrder}`)
       const data = await res.json()
-      // Map the API response to match our interface (handle snake_case from Supabase)
-      const mappedOrders = (data.orders || []).map((order: any) => ({
-        ...order,
-        orderNumber: order.order_number || order.orderNumber,
-        customerName: order.customer_name || order.customerName,
-        whatsapp: order.whatsapp,
-        address: order.address,
-        subtotal: order.subtotal,
-        deliveryFee: order.delivery_fee || order.deliveryFee,
-        total: order.total,
-        transactionId: order.transaction_id || order.transactionId,
-        status: order.status,
-        createdAt: order.created_at || order.createdAt,
-        items: (order.order_items || order.items || []).map((item: any) => ({
-          ...item,
-          productName: item.product_name || item.productName,
-          quantity: item.quantity,
-          price: item.price,
-          total: item.total
+      
+      if (data.error) {
+        console.error('API error:', data.error)
+        setOrders([])
+      } else {
+        // Map the API response to match our interface (handle snake_case from Supabase)
+        const mappedOrders = (data.orders || []).map((order: any) => ({
+          ...order,
+          orderNumber: order.order_number || order.orderNumber,
+          customerName: order.customer_name || order.customerName,
+          whatsapp: order.whatsapp,
+          address: order.address,
+          subtotal: order.subtotal,
+          deliveryFee: order.delivery_fee || order.deliveryFee,
+          total: order.total,
+          transactionId: order.transaction_id || order.transactionId,
+          status: order.status,
+          createdAt: order.created_at || order.createdAt,
+          items: (order.order_items || order.items || []).map((item: any) => ({
+            ...item,
+            productName: item.product_name || item.productName,
+            quantity: item.quantity,
+            price: item.price,
+            total: item.total
+          }))
         }))
-      }))
-      setOrders(mappedOrders)
+        setOrders(mappedOrders)
+      }
     } catch (error) {
       console.error('Failed to fetch orders:', error)
+      setOrders([])
     } finally {
       setLoading(false)
     }

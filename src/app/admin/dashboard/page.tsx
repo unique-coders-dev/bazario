@@ -40,9 +40,42 @@ export default function DashboardPage() {
       
       const res = await fetch(`/api/admin/dashboard?${params.toString()}`)
       const data = await res.json()
-      setStats(data.stats)
+      
+      if (data.error) {
+        console.error('API error:', data.error)
+        // Show error state instead of crashing
+        setStats({
+          todayOrders: 0,
+          todayRevenue: 0,
+          pendingOrders: 0,
+          confirmedOrders: 0,
+          deliveredOrders: 0,
+          totalOrders: 0,
+          totalRevenue: 0
+        })
+      } else {
+        setStats(data.stats || {
+          todayOrders: 0,
+          todayRevenue: 0,
+          pendingOrders: 0,
+          confirmedOrders: 0,
+          deliveredOrders: 0,
+          totalOrders: 0,
+          totalRevenue: 0
+        })
+      }
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error)
+      // Set empty stats on error to prevent crash
+      setStats({
+        todayOrders: 0,
+        todayRevenue: 0,
+        pendingOrders: 0,
+        confirmedOrders: 0,
+        deliveredOrders: 0,
+        totalOrders: 0,
+        totalRevenue: 0
+      })
     } finally {
       setLoading(false)
     }

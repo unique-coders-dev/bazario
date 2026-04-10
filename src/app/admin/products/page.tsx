@@ -47,18 +47,34 @@ export default function ProductsPage() {
   }, [searchQuery, categoryFilter, sortOrder])
 
   const fetchCategories = async () => {
-    const res = await fetch('/api/admin/categories')
-    const data = await res.json()
-    setCategories(data.categories || [])
+    try {
+      const res = await fetch('/api/admin/categories')
+      const data = await res.json()
+      if (data.error) {
+        console.error('API error:', data.error)
+        setCategories([])
+      } else {
+        setCategories(data.categories || [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch categories:', error)
+      setCategories([])
+    }
   }
 
   const fetchProducts = async () => {
     try {
       const res = await fetch(`/api/admin/products?search=${searchQuery}&category=${categoryFilter}&sort=${sortOrder}`)
       const data = await res.json()
-      setProducts(data.products)
+      if (data.error) {
+        console.error('API error:', data.error)
+        setProducts([])
+      } else {
+        setProducts(data.products || [])
+      }
     } catch (error) {
       console.error('Failed to fetch products:', error)
+      setProducts([])
     } finally {
       setLoading(false)
     }

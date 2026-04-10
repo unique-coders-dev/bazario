@@ -34,9 +34,15 @@ export default function CategoriesPage() {
     try {
       const res = await fetch(`/api/admin/categories?search=${searchQuery}&sort=${sortOrder}`)
       const data = await res.json()
-      setCategories(data.categories)
+      if (data.error) {
+        console.error('API error:', data.error)
+        setCategories([])
+      } else {
+        setCategories(data.categories || [])
+      }
     } catch (error) {
       console.error('Failed to fetch categories:', error)
+      setCategories([])
     } finally {
       setLoading(false)
     }

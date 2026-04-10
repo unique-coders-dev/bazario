@@ -80,7 +80,7 @@ function ProductCard({ product, onAddToCart }: { product: Product; onAddToCart: 
 
   return (
     <div className="product-card bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-      {/* Discount Tag */}
+      {/* Discount Tag - only show if originalPrice > 0 AND discount > 0 */}
       <div className="relative">
         <img
           src={imgError ? fallbackImage : product.image}
@@ -88,9 +88,11 @@ function ProductCard({ product, onAddToCart }: { product: Product; onAddToCart: 
           className="w-full h-36 object-cover"
           onError={() => setImgError(true)}
         />
-        <span className="absolute top-2 right-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
-          -{product.discount}%
-        </span>
+        {product.originalPrice > 0 && product.discount > 0 && (
+          <span className="absolute top-2 right-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+            -{product.discount}%
+          </span>
+        )}
       </div>
 
       {/* Product Info */}
@@ -99,7 +101,7 @@ function ProductCard({ product, onAddToCart }: { product: Product; onAddToCart: 
         <p className="text-xs text-gray-500 mb-2">{product.description || ''}</p>
         <div className="flex items-center gap-2 mb-2">
           <span className="text-green-600 font-bold">{product.price}tk</span>
-          {product.originalPrice > product.price && (
+          {product.originalPrice > 0 && product.originalPrice > product.price && (
             <span className="text-gray-400 text-xs line-through">{product.originalPrice}tk</span>
           )}
         </div>
