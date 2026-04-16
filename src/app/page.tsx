@@ -131,7 +131,6 @@ export default function Home() {
   const [showCart, setShowCart] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo>({ name: '', whatsapp: '', address: '' });
-  const [transactionId, setTransactionId] = useState('');
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [filterLoading, setFilterLoading] = useState(false);
   const [orderHistory, setOrderHistory] = useState<OrderHistory[]>([]);
@@ -279,10 +278,10 @@ export default function Home() {
   // Infinite scroll
   useEffect(() => {
     const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && !loading && displayedCount < allProducts.length) {
+      if (entries[0].isIntersecting && !loading && displayedCount < filteredProducts.length) {
         setLoading(true);
         setTimeout(() => {
-          setDisplayedCount(prev => Math.min(prev + 6, allProducts.length));
+          setDisplayedCount(prev => Math.min(prev + 10, filteredProducts.length));
           setLoading(false);
         }, 500);
       }
@@ -293,7 +292,7 @@ export default function Home() {
     }
 
     return () => observer.disconnect();
-  }, [loading, displayedCount]);
+  }, [loading, displayedCount, allProducts, filteredProducts.length]);
 
   // Add to cart
   const addToCart = (product: Product) => {
@@ -341,15 +340,15 @@ export default function Home() {
   const total = subtotal + deliveryFee;
   const minOrderAmount = settings?.minOrderAmount ?? 100;
 
-  // Check if minimum order is met
-  const canCheckout = subtotal >= minOrderAmount && customerInfo.name && customerInfo.whatsapp && customerInfo.address && transactionId;
+  // Check if minimum order is met (removed transactionId requirement for COD)
+  const canCheckout = subtotal >= minOrderAmount && customerInfo.name && customerInfo.whatsapp && customerInfo.address;
   const remainingForFreeDelivery = minOrderAmount - subtotal;
 
   const [placingOrder, setPlacingOrder] = useState(false);
 
   // Handle checkout - submit order to API
   const handleCheckout = async () => {
-    if (customerInfo.name && customerInfo.whatsapp && customerInfo.address && transactionId) {
+    if (customerInfo.name && customerInfo.whatsapp && customerInfo.address) {
       setPlacingOrder(true);
       try {
         const items = cart.map(item => ({
@@ -366,7 +365,7 @@ export default function Home() {
             customerName: customerInfo.name,
             whatsapp: customerInfo.whatsapp,
             address: customerInfo.address,
-            transactionId,
+            transactionId: 'COD',
             items
           })
         });
@@ -381,7 +380,7 @@ export default function Home() {
             deliveryFee,
             total,
             customer: { ...customerInfo },
-            transactionId,
+            transactionId: 'COD',
             orderDate: new Date().toISOString(),
             status: 'pending',
           };
@@ -400,7 +399,6 @@ export default function Home() {
           setShowCheckout(false);
           setShowCart(false);
           setCustomerInfo({ name: '', whatsapp: '', address: '' });
-          setTransactionId('');
         } else {
           alert('Failed to place order. Please try again.');
         }
@@ -503,7 +501,7 @@ export default function Home() {
           <img 
               src={settings?.logo || 'https://cdn-icons-png.flaticon.com/512/10437/10437361.png'} 
               alt={settings?.siteName || 'Bazario Logo'} 
-              className="h-10 w-auto"
+              className="h-[60px] w-auto transition-all"
             />
 
           {/* Right side buttons - Cart first, then Order History */}
@@ -696,7 +694,7 @@ export default function Home() {
         {/* Infinite scroll loader */}
         <div ref={loaderRef} className="flex justify-center py-8" aria-label="Load more products">
           {loading && <div className="w-6 h-6 border-3 border-green-600 border-t-transparent rounded-full animate-spin" />}
-          {!loading && displayedCount >= allProducts.length && filteredProducts.length > 0 && (
+          {!loading && displayedCount >= filteredProducts.length && filteredProducts.length > 0 && (
             <p className="text-gray-400 text-sm">You've seen all products!</p>
           )}
         </div>
@@ -804,8 +802,16 @@ export default function Home() {
             {cart.length > 0 && (
               <div className="p-4 border-t border-gray-100 bg-gray-50">
                 {subtotal < minOrderAmount && (
-                  <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-700">
-                    Minimum order amount is {minOrderAmount}tk. Add {remainingForFreeDelivery}tk more.
+                  <div className="mb-4 p-4 bg-red-50 border-2 border-red-100 rounded-2xl flex items-center gap-3 animate-[pulse_2s_infinite]">
+                    <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center shrink-0">
+                      <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="font-bold text-red-800">অর্ডার সম্পন্ন করতে আরো পণ্য যোগ করুন</p>
+                      <p className="text-sm text-red-600">কমপক্ষে {minOrderAmount}tk অর্ডার করতে হবে। আপনার আরও {remainingForFreeDelivery}tk প্রয়োজন।</p>
+                    </div>
                   </div>
                 )}
                 <div className="space-y-2 mb-4">
@@ -825,9 +831,9 @@ export default function Home() {
                 <button
                   onClick={() => { setShowCart(false); setShowCheckout(true); }}
                   disabled={subtotal < minOrderAmount}
-                  className="w-full py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-colors"
+                  className="w-full py-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-extrabold rounded-2xl shadow-lg transition-all"
                 >
-                  {subtotal < minOrderAmount ? `Minimum ${minOrderAmount}tk Required` : 'Proceed to Checkout'}
+                  {subtotal < minOrderAmount ? `আরও ${remainingForFreeDelivery}tk পণ্য যোগ করুন` : 'Proceed to Checkout (অর্ডার করুন)'}
                 </button>
               </div>
             )}
@@ -912,58 +918,17 @@ export default function Home() {
                 
               </div>
 
-              {/* Payment Info */}
+              {/* Payment Info - Updated to COD */}
               <div className="space-y-4">
-                <h3 className="font-semibold text-gray-800">Payment</h3>
-                {/* Transaction ID Input First */}
-                <div>
-                  <label htmlFor="transaction-id" className="block text-sm font-medium text-gray-600 mb-1">Transaction ID</label>
-                  <input
-                    id="transaction-id"
-                    type="text"
-                    value={transactionId}
-                    onChange={(e) => setTransactionId(e.target.value)}
-                    placeholder="Enter transaction ID (e.g., TRX123456789)"
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:border-green-500"
-                  />
-                </div>
-                {/* Payment Guidelines */}
-                <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200">
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className="w-10 h-10 bg-yellow-400 rounded-full flex items-center justify-center" aria-hidden="true">
-                      <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-                      </svg>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-800">bKash / Nagad</p>
-                      <p className="text-xs text-gray-500">Send payment to verify</p>
-                    </div>
+                <h3 className="font-semibold text-gray-800">Payment Method</h3>
+                <div className="bg-green-50 p-6 rounded-2xl border border-green-200 flex flex-col items-center text-center">
+                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                    <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
                   </div>
-                  <div className="bg-white p-3 rounded-lg border border-yellow-200">
-                    <p className="text-xs text-gray-500 mb-2">Payment Steps:</p>
-                    <ol className="text-xs text-gray-600 space-y-1 list-decimal list-inside">
-                      <li>Open bKash/Nagad app</li>
-                      <li>
-                        Send <span className="font-bold text-green-700 bg-green-100 px-1 rounded">{total}tk</span> to merchant number:
-                        {settings?.merchantNumber ? (
-                          <button
-                            onClick={() => { navigator.clipboard.writeText(settings.merchantNumber); }}
-                            className="ml-1 inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 font-semibold"
-                          >
-                            {settings.merchantNumber}
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                            </svg>
-                          </button>
-                        ) : (
-                          <span className="text-red-500 font-semibold ml-1">Not configured</span>
-                        )}
-                      </li>
-                      <li>Copy the transaction ID</li>
-                      <li>Paste it in the field above</li>
-                    </ol>
-                  </div>
+                  <h3 className="text-lg font-bold text-gray-800 mb-1">Cash on Delivery</h3>
+                  <p className="text-sm text-gray-500">পণ্য হাতে পেয়ে টাকা পরিশোধ করুন (Pay when you receive the product)</p>
                 </div>
               </div>
             </div>
