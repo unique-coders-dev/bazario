@@ -13,8 +13,7 @@ import {
   HiOutlineX
 } from 'react-icons/hi'
 
-const STORAGE_KEY = 'bzario_admin_auth'
-const SESSION_DURATION = 24 * 60 * 60 * 1000 // 24 hours
+import { useSession, signOut } from 'next-auth/react'
 
 const menuItems = [
   { href: '/admin/dashboard', icon: HiOutlineHome, label: 'Dashboard' },
@@ -28,45 +27,21 @@ const menuItems = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
+  const { data: session, status } = useSession()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
 
   useEffect(() => {
-    // Check authentication status
-    const authData = localStorage.getItem(STORAGE_KEY)
-    
-    if (pathname === '/admin/login') {
-      // If already authenticated and trying to access login, redirect to dashboard
-      if (authData) {
-        const { timestamp } = JSON.parse(authData)
-        if (Date.now() - timestamp < SESSION_DURATION) {
-          router.push('/admin/dashboard')
-          return
-        }
-      }
-      setIsAuthenticated(false)
-      return
-    }
-    
-    // For other admin pages, check if authenticated
-    if (!authData) {
+    if (status === 'unauthenticated' && pathname !== '/admin/login') {
       router.push('/admin/login')
-      return
     }
     
-    const { timestamp } = JSON.parse(authData)
-    if (Date.now() - timestamp >= SESSION_DURATION) {
-      // Session expired
-      localStorage.removeItem(STORAGE_KEY)
-      router.push('/admin/login')
-      return
+    if (status === 'authenticated' && pathname === '/admin/login') {
+      router.push('/admin/dashboard')
     }
-    
-    setIsAuthenticated(true)
-  }, [pathname, router])
+  }, [status, pathname, router])
 
   // Show loading while checking auth
-  if (isAuthenticated === null) {
+  if (status === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
         <div className="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
@@ -80,7 +55,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }
 
   // Not authenticated, don't render children
-  if (!isAuthenticated) {
+  if (status === 'unauthenticated') {
     return null
   }
 
@@ -126,18 +101,21 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t">
           <div className="flex items-center gap-3 mb-3 px-4">
             <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-              <span className="text-green-700 font-bold">A</span>
+              <span className="text-green-700 font-bold">
+                {session?.user?.name?.[0]?.toUpperCase() || 'A'}
+              </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-gray-800 truncate">Admin</p>
-              <p className="text-xs text-gray-500 truncate">Static Auth</p>
+              <p className="font-medium text-gray-800 truncate">
+                {session?.user?.name || 'Admin'}
+              </p>
+              <p className="text-xs text-gray-500 truncate">
+                {session?.user?.email || 'admin@bazario.com'}
+              </p>
             </div>
           </div>
           <button
-            onClick={() => {
-              localStorage.removeItem(STORAGE_KEY)
-              window.location.href = '/admin/login'
-            }}
+            onClick={() => signOut({ callbackUrl: '/admin/login' })}
             className="flex items-center gap-3 px-4 py-2 text-red-600 hover:bg-red-50 rounded-xl w-full"
           >
             <HiOutlineLogout size={20} />

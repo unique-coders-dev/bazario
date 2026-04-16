@@ -32,7 +32,17 @@ export async function GET(request: Request) {
     
     const { data: admins } = await query.order('created_at', { ascending: sort === 'asc' })
 
-    return NextResponse.json({ admins })
+    const formattedAdmins = (admins || []).map(admin => ({
+      id: admin.id,
+      email: admin.email,
+      name: admin.name,
+      role: admin.role,
+      isActive: admin.is_active,
+      twoFactorSecret: admin.two_factor_secret,
+      createdAt: admin.created_at
+    }))
+
+    return NextResponse.json({ admins: formattedAdmins })
   } catch (error) {
     console.error('Admins GET error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

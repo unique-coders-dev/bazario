@@ -19,7 +19,7 @@ export const authOptions: NextAuthOptions = {
 
         const { data: admin, error } = await supabaseAdmin!.from('admins').select('*').eq('email', credentials.email).single()
 
-        if (!admin || !admin.isActive) {
+        if (!admin || !admin.is_active) {
           return null
         }
 
@@ -30,7 +30,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         // If 2FA is enabled, verify TOTP code
-        if (admin.twoFactorSecret) {
+        if (admin.two_factor_secret) {
           if (!credentials.totpCode) {
             // Return user but indicate 2FA is required
             return {
@@ -45,7 +45,7 @@ export const authOptions: NextAuthOptions = {
           // Verify TOTP code
           const speakeasy = require('speakeasy')
           const verified = speakeasy.totp.verify({
-            secret: admin.twoFactorSecret,
+            secret: admin.two_factor_secret,
             encoding: 'base32',
             token: credentials.totpCode,
             window: 1
